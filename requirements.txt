@@ -1,6 +1,4 @@
-fastapi==0.110.0
-uvicorn==0.28.0
+fastapi
+uvicorn
 google-genai
-motor==3.6.0
-pymongo<4.9
-pydantic-settings==2.2.1
+motor
