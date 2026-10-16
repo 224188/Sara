@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from google import genai
 from motor.motor_asyncio import AsyncIOMotorClient
-from datetime import datetime
+from datetime import datetime, timezone
 
 app = FastAPI(title="SARA - Boss ka Personal AI")
 
@@ -50,9 +50,12 @@ async def chat_with_sara(req: ChatRequest):
     
     # 2. Gemini ke samajhne ke liye format taiyar karna
     formatted_contents = []
+    
+    # FIX: Khali history handle karne ke liye check laga diya hai
     for h in history:
-        formatted_contents.append({"role": "user", "parts": [{"text": h["user_msg"]}]})
-        formatted_contents.append({"role": "model", "parts": [{"text": h["sara_res"]}]})
+        if h.get("user_msg") and h.get("sara_res"):
+            formatted_contents.append({"role": "user", "parts": [{"text": h["user_msg"]}]})
+            formatted_contents.append({"role": "model", "parts": [{"text": h["sara_res"]}]})
     
     # Naya message history mein add karna
     formatted_contents.append({"role": "user", "parts": [{"text": req.message}]})
@@ -61,7 +64,7 @@ async def chat_with_sara(req: ChatRequest):
     system_instruction = "Aap SARA hain, Boss ke personal AI assistant aur executive trading desk controller. Hamesha loyal, smart aur response Hinglish/Hindi mein short aur punchy rakhein."
     
     try:
-        # 3. Gemini Flash AI se jawab mangna
+        # 3. Gemini Flash AI se jawab mangna (Using Latest Model Config)
         response = ai_client.models.generate_content(
             model='gemini-2.5-flash',
             contents=formatted_contents,
@@ -69,15 +72,17 @@ async def chat_with_sara(req: ChatRequest):
         )
         sara_response = response.text
         
-        # 4. Nayi baat ko MongoDB memory mein save karna
+        # 4. Nayi baat ko MongoDB memory mein safe UTC timezone ke saath save karna
         await db["chat_history"].insert_one({
             "session_id": req.session_id,
             "user_msg": req.message,
             "sara_res": sara_response,
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(timezone.utc)
         })
         
         return {"response": sara_response}
         
     except Exception as e:
+        # Render logs mein exact error check karne ke liye print statement
+        print(f"Asli AI Error Check Karo, Boss: {str(e)}")
         raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
