@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from google import genai
+from google.genai import types
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, timezone
 
@@ -51,24 +52,26 @@ async def chat_with_sara(req: ChatRequest):
     # 2. Gemini ke samajhne ke liye format taiyar karna
     formatted_contents = []
     
-    # FIX: Khali history handle karne ke liye check laga diya hai
+    # History formats ko correct types structures me convert karna
     for h in history:
         if h.get("user_msg") and h.get("sara_res"):
-            formatted_contents.append({"role": "user", "parts": [{"text": h["user_msg"]}]})
-            formatted_contents.append({"role": "model", "parts": [{"text": h["sara_res"]}]})
+            formatted_contents.append(types.Content(role="user", parts=[types.Part.from_text(text=h["user_msg"])]))
+            formatted_contents.append(types.Content(role="model", parts=[types.Part.from_text(text=h["sara_res"])]))
     
     # Naya message history mein add karna
-    formatted_contents.append({"role": "user", "parts": [{"text": req.message}]})
+    formatted_contents.append(types.Content(role="user", parts=[types.Part.from_text(text=req.message)]))
     
     # System Instructions taaki SARA hamesha loyal assistant rahe
-    system_instruction = "Aap SARA hain, Boss ke personal AI assistant aur executive trading desk controller. Hamesha loyal, smart aur response Hinglish/Hindi mein short aur punchy rakhein."
+    system_instruction = "Aap SARA hain, Boss ke personal AI assistant aur executive trading desk controller. Hamesha loyal, smart aur response Hinglish/Hindi mein short aur punchy rakhein. Har response mein Boss ko zaroor address karein."
     
     try:
-        # 3. Gemini Flash AI se jawab mangna (Using Latest Model Config)
+        # 3. Gemini Flash AI se jawab mangna (Using Correct Types Configuration)
         response = ai_client.models.generate_content(
             model='gemini-2.5-flash',
             contents=formatted_contents,
-            config={'system_instruction': system_instruction}
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction
+            )
         )
         sara_response = response.text
         
