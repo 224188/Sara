@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 app = FastAPI(title="SARA - Boss ka Personal AI")
 
-# CORS Setup taaki aage chal kar humara React frontend app isse bina error ke connect ho sake
+# CORS Setup taaki React frontend isse bina error ke connect ho sake
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -42,7 +42,7 @@ async def health_check():
 
 @app.post("/chat")
 async def chat_with_sara(req: ChatRequest):
-    if not ai_client or not db:
+    if not ai_client or db is None:
         raise HTTPException(status_code=500, detail="SARA ka system poori tarah configured nahi hai, Boss!")
     
     # 1. MongoDB se purani chat history nikaalna (Memory)
@@ -52,16 +52,22 @@ async def chat_with_sara(req: ChatRequest):
     # 2. Gemini ke samajhne ke liye format taiyar karna
     formatted_contents = []
     
-    # History formats ko correct types structures me convert karna
+    # History formats ko correct structures me convert karna
     for h in history:
         if h.get("user_msg") and h.get("sara_res"):
-            formatted_contents.append(types.Content(role="user", parts=[types.Part.from_text(text=h["user_msg"])]))
-            formatted_contents.append(types.Content(role="model", parts=[types.Part.from_text(text=h["sara_res"])]))
+            formatted_contents.append(
+                types.Content(role="user", parts=[types.Part.from_text(text=h["user_msg"])])
+            )
+            formatted_contents.append(
+                types.Content(role="model", parts=[types.Part.from_text(text=h["sara_res"])])
+            )
     
     # Naya message history mein add karna
-    formatted_contents.append(types.Content(role="user", parts=[types.Part.from_text(text=req.message)]))
+    formatted_contents.append(
+        types.Content(role="user", parts=[types.Part.from_text(text=req.message)])
+    )
     
-    # System Instructions with strict Hinglish/English mix and dashboard rules
+    # System Instructions
     system_instruction = (
         "You are SARA, the personal AI assistant and executive trading desk controller for 'Boss'. "
         "Your personality is highly loyal, sharp, efficient, and slightly witty. "
@@ -78,7 +84,8 @@ async def chat_with_sara(req: ChatRequest):
     )
     
     try:
-        # 3. Gemini Flash AI se jawab mangna (Using Correct Types Configuration)
+        # 3. Gemini AI se jawab mangna (Using Correct Types Configuration)
+        # Note: Agar 'gemini-2.5-flash' error de, toh aap ise 'gemini-1.5-flash' pe switch kar sakte hain.
         response = ai_client.models.generate_content(
             model='gemini-2.5-flash',
             contents=formatted_contents,
@@ -99,6 +106,5 @@ async def chat_with_sara(req: ChatRequest):
         return {"response": sara_response}
         
     except Exception as e:
-        # Render logs mein exact error check karne ke liye print statement
         print(f"Asli AI Error Check Karo, Boss: {str(e)}")
         raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
