@@ -28,10 +28,17 @@ app.add_middleware(
 )
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+GEMINI_MODEL = "gemini-3.8-flash"
 MONGO_URI = os.getenv("MONGO_URI", "").strip()
+# Keep MongoDB disabled until its TLS/connection issue is resolved.
+# Re-enable later by setting ENABLE_MONGODB=true on the backend.
+MONGO_ENABLED = os.getenv("ENABLE_MONGODB", "false").strip().lower() == "true"
 
-db_client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000) if MONGO_URI else None
+db_client = (
+    AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    if MONGO_ENABLED and MONGO_URI
+    else None
+)
 db = db_client["sara_database"] if db_client else None
 ai_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
