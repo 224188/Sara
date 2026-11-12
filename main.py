@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from datetime import datetime, timezone
@@ -116,7 +117,10 @@ async def chat_with_sara(req: ChatRequest):
     )
 
     try:
-        response = ai_client.models.generate_content(
+        # The Google GenAI SDK call is synchronous. Run it in a worker thread so
+        # this async API can still serve health checks and other requests while Gemini responds.
+        response = await asyncio.to_thread(
+            ai_client.models.generate_content,
             model=GEMINI_MODEL,
             contents=formatted_contents,
             config=types.GenerateContentConfig(system_instruction=system_instruction),
