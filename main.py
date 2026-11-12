@@ -6,8 +6,10 @@ from google import genai
 from google.genai import types
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, timezone
+from plugin_hub import router as plugin_hub_router
 
 app = FastAPI(title="SARA - Boss ka Personal AI")
+app.include_router(plugin_hub_router)
 
 # CORS Setup taaki React frontend isse bina error ke connect ho sake
 app.add_middleware(
