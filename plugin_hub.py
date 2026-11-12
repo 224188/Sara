@@ -134,6 +134,10 @@ class ApprovalRequest(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
+class ApprovalDecision(BaseModel):
+    decision: str = Field(pattern="^(approved|denied)$")
+
+
 # In-memory fallback keeps the scaffold usable without MongoDB. Production must
 # inject persistent storage and a real authenticated Boss identity.
 _state: dict[str, dict[str, Any]] = {}
@@ -212,6 +216,24 @@ async def request_approval(plugin_id: str, req: ApprovalRequest,
     _record("approval_requested", plugin_id, {"approval_id": approval_id, "action": req.action})
     return {"approval": _pending_approvals[approval_id],
             "note": "Request recorded only. No external action was executed."}
+
+
+@router.post("/approvals/{approval_id}/decision")
+async def decide_approval(approval_id: str, req: ApprovalDecision,
+                          x_sara_boss_key: str | None = Header(default=None)):
+    """Record Boss's decision only; never execute the requested external action."""
+    _boss_guard(x_sara_boss_key)
+    approval = _pending_approvals.get(approval_id)
+    if approval is None:
+        raise HTTPException(status_code=404, detail="Approval request not found")
+    if approval["status"] != "pending":
+        raise HTTPException(status_code=409, detail="Approval request already decided")
+    approval["status"] = req.decision
+    approval["decided_at"] = datetime.now(timezone.utc).isoformat()
+    _record("approval_" + req.decision, approval["plugin_id"],
+            {"approval_id": approval_id})
+    return {"approval": approval,
+            "note": "Decision recorded only. No external action was executed."}
 
 
 @router.get("/approvals")
