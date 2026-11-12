@@ -77,7 +77,7 @@ CATALOG = [
     PluginDefinition(plugin_id="whatsapp_business", name="WhatsApp Business", category=PluginCategory.COMMUNICATION,
         description="Messaging integration (provider adapter not implemented).", free_tier=False,
         requires_api_key=True, may_require_paid_plan=True, permissions=["read_messages", "send_messages"],
-        limitations=["Meta Business verification, templates, and conversation charges may apply; sending requires Boss approval."]),,
+        limitations=["Meta Business verification, templates, and conversation charges may apply; sending requires Boss approval."]),
     PluginDefinition(plugin_id="google_drive", name="Google Drive", category=PluginCategory.DOCUMENTS,
         description="Cloud file listing and document access (OAuth adapter not implemented).", free_tier=True,
         permissions=["list_files", "read_files", "create_files"],
