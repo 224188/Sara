@@ -124,22 +124,66 @@ async def chat_with_sara(req: ChatRequest):
     )
 
     try:
-        # The Google GenAI SDK call is synchronous. Run it in a worker thread so
-        # this async API can still serve health checks and other requests while Gemini responds.
-        response = await asyncio.to_thread(
-            ai_client.models.generate_content,
-            model=GEMINI_MODEL,
-            contents=formatted_contents,
-            config=types.GenerateContentConfig(system_instruction=system_instruction),
-        )
+        # Gemini can temporarily return 503 (high demand) or 429 (rate limit).
+        # Retry only transient HTTP statuses; never switch to a paid provider.
+        response = None
+        max_attempts = 3
+        transient_statuses = {429, 500, 502, 503, 504}
+
+        for attempt in range(max_attempts):
+            try:
+                # The SDK call is synchronous; keep it off FastAPI's event loop.
+                response = await asyncio.to_thread(
+                    ai_client.models.generate_content,
+                    model=GEMINI_MODEL,
+                    contents=formatted_contents,
+                    config=types.GenerateContentConfig(system_instruction=system_instruction),
+                )
+                break
+            except Exception as exc:
+                status = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+                try:
+                    status = int(status)
+                except (TypeError, ValueError):
+                    status = None
+
+                if status not in transient_statuses or attempt == max_attempts - 1:
+                    logger.exception("Gemini response generation failed")
+                    if status == 503:
+                        raise HTTPException(
+                            status_code=503,
+                            detail="Gemini is temporarily busy. Please try again in a little while.",
+                        ) from exc
+                    if status == 429:
+                        raise HTTPException(
+                            status_code=429,
+                            detail="Gemini free-tier rate limit reached. Please try again later.",
+                        ) from exc
+                    raise HTTPException(
+                        status_code=502,
+                        detail="Gemini reply failed. Check backend logs, API key, model access, and free-tier quota.",
+                    ) from exc
+
+                wait_seconds = 2 ** attempt
+                logger.warning(
+                    "Gemini returned transient status %s; retrying in %s seconds (attempt %s/%s)",
+                    status,
+                    wait_seconds,
+                    attempt + 1,
+                    max_attempts,
+                )
+                await asyncio.sleep(wait_seconds)
+
         sara_response = (response.text or "").strip()
         if not sara_response:
             raise RuntimeError("Gemini returned an empty response")
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("Gemini response generation failed")
         raise HTTPException(
             status_code=502,
-            detail="Gemini reply failed. Check the backend logs, API key, model access, and free-tier quota.",
+            detail="Gemini returned an invalid or empty reply. Please try again.",
         )
 
     memory_saved = False
